@@ -8,6 +8,7 @@
 
 #include <limits.h>
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <rapidcheck/gtest.h>
 
 #include <numeric>
@@ -377,6 +378,64 @@ TEST(openFileEnsureBeneathNoSymlinks, works)
     EXPECT_EQ(open("c/d/regular", O_RDONLY | O_DIRECTORY), INVALID_DESCRIPTOR);
     EXPECT_TRUE(AutoCloseFD{open("c/d/regular", O_RDONLY)});
     EXPECT_TRUE(AutoCloseFD{open("a/regular", O_CREAT | O_WRONLY | O_EXCL, 0666)});
+}
+
+#endif
+
+/* ----------------------------------------------------------------------------
+ * readLinkAt
+ * --------------------------------------------------------------------------*/
+
+#ifndef _WIN32
+
+TEST(readLinkAt, works)
+{
+    std::filesystem::path tmpDir = nix::createTempDir();
+    nix::AutoDelete delTmpDir(tmpDir, /*recursive=*/true);
+    using namespace nix::unix;
+
+    std::string mediumTarget(PATH_MAX / 2, 'x');
+    std::string longTarget(PATH_MAX - 1, 'y');
+
+    {
+        RestoreSink sink(/*startFsync=*/false);
+        sink.dstPath = tmpDir;
+        sink.dirFd = openDirectory(tmpDir);
+        sink.createSymlink(CanonPath("link"), "target");
+        sink.createSymlink(CanonPath("relative"), "../relative/path");
+        sink.createSymlink(CanonPath("absolute"), "/absolute/path");
+        sink.createSymlink(CanonPath("medium"), mediumTarget);
+        sink.createSymlink(CanonPath("long"), longTarget);
+        sink.createDirectory(CanonPath("a"));
+        sink.createDirectory(CanonPath("a/b"));
+        sink.createSymlink(CanonPath("a/b/link"), "nested_target");
+        sink.createRegularFile(CanonPath("regular"), [](CreateRegularFileSink &) {});
+        sink.createDirectory(CanonPath("dir"));
+    }
+
+    AutoCloseFD dirFd = openDirectory(tmpDir);
+
+    EXPECT_EQ(readLinkAt(dirFd.get(), CanonPath("link")), "target");
+    EXPECT_EQ(readLinkAt(dirFd.get(), CanonPath("relative")), "../relative/path");
+    EXPECT_EQ(readLinkAt(dirFd.get(), CanonPath("absolute")), "/absolute/path");
+    EXPECT_EQ(readLinkAt(dirFd.get(), CanonPath("medium")), mediumTarget);
+    EXPECT_EQ(readLinkAt(dirFd.get(), CanonPath("long")), longTarget);
+    EXPECT_EQ(readLinkAt(dirFd.get(), CanonPath("a/b/link")), "nested_target");
+
+    AutoCloseFD subDirFd = openDirectory(tmpDir / "a");
+    EXPECT_EQ(readLinkAt(subDirFd.get(), CanonPath("b/link")), "nested_target");
+
+    EXPECT_THAT(
+        [&] { readLinkAt(dirFd.get(), CanonPath("regular")); },
+        Throws<SysError>(::testing::Field(&SysError::errNo, EINVAL)));
+
+    EXPECT_THAT(
+        [&] { readLinkAt(dirFd.get(), CanonPath("dir")); },
+        Throws<SysError>(::testing::Field(&SysError::errNo, EINVAL)));
+
+    EXPECT_THAT(
+        [&] { readLinkAt(dirFd.get(), CanonPath("nonexistent")); },
+        Throws<SysError>(::testing::Field(&SysError::errNo, ENOENT)));
 }
 
 #endif

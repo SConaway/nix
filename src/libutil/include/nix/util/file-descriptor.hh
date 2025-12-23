@@ -256,6 +256,11 @@ namespace unix {
  */
 Descriptor openFileEnsureBeneathNoSymlinks(Descriptor dirFd, const CanonPath & path, int flags, mode_t mode = 0);
 
+/**
+ * Read a symlink relative to a directory file descriptor.
+ */
+std::string readLinkAt(Descriptor dirFd, const CanonPath & path);
+
 } // namespace unix
 #endif
 
