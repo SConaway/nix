@@ -119,14 +119,14 @@ TEST_F(FSSourceAccessorTest, works)
 
         EXPECT_THROW(accessor->readFile(CanonPath("a/dirlink/file2")), SymlinkNotAllowed);
         EXPECT_THROW(accessor->maybeLstat(CanonPath("a/dirlink/file2")), SymlinkNotAllowed);
-        EXPECT_THROW(accessor->readDirectory(CanonPath("a/dirlink")), SymlinkNotAllowed);
+        EXPECT_THROW(accessor->readDirectory(CanonPath("a/dirlink")), NotADirectory);
         EXPECT_THROW(accessor->pathExists(CanonPath("a/dirlink/file2")), SymlinkNotAllowed);
     }
 
     {
         auto accessor = makeFSSourceAccessor(tmpDir / "nonexistent");
         EXPECT_FALSE(accessor->maybeLstat(CanonPath::root));
-        EXPECT_THROW(accessor->readFile(CanonPath::root), SystemError);
+        EXPECT_THROW(accessor->readFile(CanonPath::root), FileNotFound);
     }
 
     {
