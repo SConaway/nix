@@ -53,12 +53,19 @@ class UnixFileSourceAccessor : public UnixSourceAccessorBase
     mutable struct ::stat cachedStat;
 
 public:
-    UnixFileSourceAccessor(AutoCloseFD fd_, CanonPath rootPath_, bool trackLastModified)
+
+    UnixFileSourceAccessor(AutoCloseFD fd_, CanonPath rootPath_, bool trackLastModified, struct ::stat * st = nullptr)
         : UnixSourceAccessorBase(trackLastModified)
         , fd(std::move(fd_))
         , rootPath(std::move(rootPath_))
     {
         displayPrefix = rootPath.abs();
+        if (st) {
+            std::call_once(statFlag, [this, st] {
+                cachedStat = *st;
+                updateMtime(cachedStat.st_mtime);
+            });
+        }
     }
 
     std::string showPath(const CanonPath & path) override
@@ -110,14 +117,10 @@ public:
         if (!path.isRoot())
             throw FileNotFound("path '%s' does not exist", showPath(path));
 
-        struct ::stat st;
-        if (::fstat(fd.get(), &st) == -1)
-            throw SysError("statting file '%s'", showPath(path));
-
-        sizeCallback(st.st_size);
-
-        off_t left = st.st_size;
+        auto st = maybeLstat(path).value();
+        off_t left = st.fileSize.value();
         off_t offset = 0;
+        sizeCallback(left);
 
         /* TODO: Optimise for the case when Sink is an FdSink and call sendfile. Needs
            portable helper in unix/file-descriptor to handle the differences between Darwin

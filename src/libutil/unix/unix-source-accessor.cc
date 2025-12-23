@@ -91,7 +91,7 @@ ref<SourceAccessor> makeFSSourceAccessor(std::filesystem::path root, bool trackL
     if (S_ISDIR(st.st_mode)) {
         return make_ref<UnixDirectorySourceAccessor>(std::move(fd), std::move(rootPath), trackLastModified);
     } else if (S_ISREG(st.st_mode)) {
-        return make_ref<UnixFileSourceAccessor>(std::move(fd), std::move(rootPath), trackLastModified);
+        return make_ref<UnixFileSourceAccessor>(std::move(fd), std::move(rootPath), trackLastModified, &st);
     } else {
         return makeEmptySourceAccessor();
     }
